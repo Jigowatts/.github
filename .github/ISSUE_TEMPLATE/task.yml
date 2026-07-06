@@ -1,6 +1,6 @@
 name: タスク
 description: 実装・調査・修正などのタスク用Issueテンプレート
-title: ""
+title: "issue"
 labels: []
 assignees: []
 
