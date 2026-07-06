@@ -1,0 +1,66 @@
+name: タスク
+description: 実装・調査・修正などのタスク用Issueテンプレート
+title: "issue"
+labels: []
+assignees: []
+
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 対応内容の概要を記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 経緯 / 目的
+      description: なぜこの対応が必要なのかを記載してください。
+    validations:
+      required: false
+
+  - type: textarea
+    id: definition-of-done
+    attributes:
+      label: 完了の定義
+      description: このIssueが完了したと判断できる条件を記載してください。
+      value: |
+        -
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-status
+    attributes:
+      label: 現状
+      description: 現在の状態や前提情報を記載してください。
+    validations:
+      required: false
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: 影響範囲
+      description: 影響する機能、画面、API、DB、ユーザーなどを記載してください。
+    validations:
+      required: false
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 詳細
+      description: 実装方針、調査内容、補足情報などを記載してください。
+    validations:
+      required: false
+
+  - type: textarea
+    id: test-cases
+    attributes:
+      label: テストケース
+      description: 確認すべき内容を記載してください。
+      value: |
+        -
+    validations:
+      required: false
