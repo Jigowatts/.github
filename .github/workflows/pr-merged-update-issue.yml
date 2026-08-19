@@ -13,7 +13,6 @@ jobs:
       - name: Update Linked Issue Status in Project
         uses: actions/github-script@v7
         env:
-          PROJECT_ID: "PVT_kwDOAHbWC84Bevq5"
           FIELD_ID: "PVTSSF_lADOAHbWC84Bevq5zhZHmwQ"
           IN_REVIEW_OPTION_ID: "ef436d83"
           IN_TEST_OPTION_ID: "bb327e67"
@@ -21,7 +20,6 @@ jobs:
         with:
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
           script: |
-            const projectId = process.env.PROJECT_ID;
             const fieldId = process.env.FIELD_ID;
             const inReviewOptionId = process.env.IN_REVIEW_OPTION_ID;
             const inTestOptionId = process.env.IN_TEST_OPTION_ID;
@@ -29,7 +27,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            // 1. PRにリンクされているIssueとそのProject Itemの現在のステータスを取得するGraphQLクエリ
+            // 1. PRにリンクされているIssueとそのProject Itemの情報を取得するGraphQLクエリ
             const query = `
               query($owner: String!, $repo: String!, $prNumber: Int!) {
                 repository(owner: $owner, name: $repo) {
@@ -73,53 +71,54 @@ jobs:
               return;
             }
 
-            // 2. 各IssueのProject Item Statusを判定・更新
+            // 2. 各Issueが属するプロジェクトアイテムを走査して動的に更新
             for (const issue of linkedIssues) {
               console.log(`Processing Issue #${issue.number}...`);
               
-              // 該当プロジェクトに属するItem IDを探索
-              const projectItem = issue.projectItems.nodes.find(item => item.project.id === projectId);
-
-              if (!projectItem) {
-                console.log(`Issue #${issue.number} は指定のプロジェクトに登録されていません。`);
+              if (!issue.projectItems || issue.projectItems.nodes.length === 0) {
+                console.log(`Issue #${issue.number} はどのプロジェクトにも登録されていません。`);
                 continue;
               }
 
-              // 現在の Status フィールドの値を取得
-              const statusFieldValue = projectItem.fieldValues.nodes.find(
-                fv => fv.field && fv.field.id === fieldId
-              );
+              for (const projectItem of issue.projectItems.nodes) {
+                const targetProjectId = projectItem.project.id;
 
-              const currentOptionId = statusFieldValue ? statusFieldValue.optionId : null;
+                // 現在の Status フィールドの値を取得
+                const statusFieldValue = projectItem.fieldValues.nodes.find(
+                  fv => fv.field && fv.field.id === fieldId
+                );
 
-              // ステータスが "In Review" (ef436d83) の場合のみ "In Test" に更新
-              if (currentOptionId === inReviewOptionId) {
-                const mutation = `
-                  mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-                    updateProjectV2ItemFieldValue(
-                      input: {
-                        projectId: $projectId
-                        itemId: $itemId
-                        fieldId: $fieldId
-                        value: { singleSelectOptionId: $optionId }
-                      }
-                    ) {
-                      projectV2Item {
-                        id
+                const currentOptionId = statusFieldValue ? statusFieldValue.optionId : null;
+
+                // ステータスが "In Review" (ef436d83) の場合のみ "In Test" に更新
+                if (currentOptionId === inReviewOptionId) {
+                  const mutation = `
+                    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                      updateProjectV2ItemFieldValue(
+                        input: {
+                          projectId: $projectId
+                          itemId: $itemId
+                          fieldId: $fieldId
+                          value: { singleSelectOptionId: $optionId }
+                        }
+                      ) {
+                        projectV2Item {
+                          id
+                        }
                       }
                     }
-                  }
-                `;
+                  `;
 
-                await github.graphql(mutation, {
-                  projectId,
-                  itemId: projectItem.id,
-                  fieldId,
-                  optionId: inTestOptionId
-                });
+                  await github.graphql(mutation, {
+                    projectId: targetProjectId,
+                    itemId: projectItem.id,
+                    fieldId,
+                    optionId: inTestOptionId
+                  });
 
-                console.log(`Issue #${issue.number} のステータスを "In Review" から "In Test" に更新しました。`);
-              } else {
-                console.log(`Issue #${issue.number} の現在のステータス (Option ID: ${currentOptionId}) が "In Review" でないため、更新をスキップします。`);
+                  console.log(`Issue #${issue.number} (Project ID: ${targetProjectId}) のステータスを "In Review" から "In Test" に更新しました。`);
+                } else {
+                  console.log(`Issue #${issue.number} (Project ID: ${targetProjectId}) の現在のステータス (Option ID: ${currentOptionId}) が "In Review" でないため、更新をスキップします。`);
+                }
               }
             }
