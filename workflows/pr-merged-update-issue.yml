@@ -15,6 +15,7 @@ jobs:
         env:
           PROJECT_ID: "PVT_kwDOAHbWC84Bevq5"
           FIELD_ID: "PVTSSF_lADOAHbWC84Bevq5zhZHmwQ"
+          IN_REVIEW_OPTION_ID: "ef436d83"
           IN_TEST_OPTION_ID: "bb327e67"
           GH_TOKEN: ${{ secrets.ADD_TO_PROJECT_PAT }}
         with:
@@ -22,12 +23,13 @@ jobs:
           script: |
             const projectId = process.env.PROJECT_ID;
             const fieldId = process.env.FIELD_ID;
-            const optionId = process.env.IN_TEST_OPTION_ID;
+            const inReviewOptionId = process.env.IN_REVIEW_OPTION_ID;
+            const inTestOptionId = process.env.IN_TEST_OPTION_ID;
             const prNumber = context.payload.pull_request.number;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
 
-            // 1. PRにリンクされているIssueを取得するGraphQLクエリ
+            // 1. PRにリンクされているIssueとそのProject Itemの現在のステータスを取得するGraphQLクエリ
             const query = `
               query($owner: String!, $repo: String!, $prNumber: Int!) {
                 repository(owner: $owner, name: $repo) {
@@ -41,6 +43,18 @@ jobs:
                             id
                             project {
                               id
+                            }
+                            fieldValues(first: 10) {
+                              nodes {
+                                ... on ProjectV2ItemFieldSingleSelectValue {
+                                  optionId
+                                  field {
+                                    ... on ProjectV2SingleSelectField {
+                                      id
+                                    }
+                                  }
+                                }
+                              }
                             }
                           }
                         }
@@ -59,14 +73,27 @@ jobs:
               return;
             }
 
-            // 2. 各IssueのProject Item Statusを更新
+            // 2. 各IssueのProject Item Statusを判定・更新
             for (const issue of linkedIssues) {
               console.log(`Processing Issue #${issue.number}...`);
               
               // 該当プロジェクトに属するItem IDを探索
               const projectItem = issue.projectItems.nodes.find(item => item.project.id === projectId);
 
-              if (projectItem) {
+              if (!projectItem) {
+                console.log(`Issue #${issue.number} は指定のプロジェクトに登録されていません。`);
+                continue;
+              }
+
+              // 現在の Status フィールドの値を取得
+              const statusFieldValue = projectItem.fieldValues.nodes.find(
+                fv => fv.field && fv.field.id === fieldId
+              );
+
+              const currentOptionId = statusFieldValue ? statusFieldValue.optionId : null;
+
+              // ステータスが "In Review" (ef436d83) の場合のみ "In Test" に更新
+              if (currentOptionId === inReviewOptionId) {
                 const mutation = `
                   mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
                     updateProjectV2ItemFieldValue(
@@ -88,11 +115,11 @@ jobs:
                   projectId,
                   itemId: projectItem.id,
                   fieldId,
-                  optionId
+                  optionId: inTestOptionId
                 });
 
-                console.log(`Issue #${issue.number} のステータスを "In Test" に更新しました。`);
+                console.log(`Issue #${issue.number} のステータスを "In Review" から "In Test" に更新しました。`);
               } else {
-                console.log(`Issue #${issue.number} は指定のプロジェクトに登録されていません。`);
+                console.log(`Issue #${issue.number} の現在のステータス (Option ID: ${currentOptionId}) が "In Review" でないため、更新をスキップします。`);
               }
             }
